@@ -88,6 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showErrorMessage('1.in or 1.out file not found');
 			return;
 		}
+		const programOutputFilePath = `${dirPath}\\program.out`;
 
 		// Run the file with corresponding commands based on the language
 		const language = filePath.substring(filePath.lastIndexOf('.') + 1);
@@ -96,53 +97,20 @@ export function activate(context: vscode.ExtensionContext) {
 			const terminal = vscode.window.createTerminal({ name: 'CodeQuest ByteBuster Debug' });
 			terminal.show();
 			terminal.sendText(`g++ -std=c++17 -Wall -Wextra -pedantic-errors -o "${executableFilePath}" "${filePath}"`);
-			terminal.sendText(`Get-Content "${inputFilePath}" | "${executableFilePath}"`);
-			const output = await new Promise<string>(resolve => {
-				const interval = setInterval(async () => {
-					const outputBuffer = await vscode.workspace.fs.readFile(vscode.Uri.file(outputFilePath));
-					const output = new TextDecoder().decode(outputBuffer);
-					if (output.trim() !== '') {
-						clearInterval(interval);
-						resolve(output);
-					}
-				}, 100);
-			});
-			const outputDocument = await vscode.workspace.openTextDocument({ content: output });
-			await vscode.commands.executeCommand('vscode.diff', outputDocument.uri, vscode.Uri.file(outputFilePath), 'Output Diff');
+			terminal.sendText(`Get-Content "${inputFilePath}" | "${executableFilePath}" > "${programOutputFilePath}"`);
+			await vscode.commands.executeCommand('vscode.diff', programOutputFilePath, vscode.Uri.file(outputFilePath), 'Output Diff');
 		} else if (language === 'py') {
 			const terminal = vscode.window.createTerminal({ name: 'CodeQuest ByteBuster Debug' });
 			terminal.show();
-			terminal.sendText(`Get-Content "${inputFilePath}" | python "${filePath}"`);
-			const output = await new Promise<string>(resolve => {
-				const interval = setInterval(async () => {
-					const outputBuffer = await vscode.workspace.fs.readFile(vscode.Uri.file(outputFilePath));
-					const output = new TextDecoder().decode(outputBuffer);
-					if (output.trim() !== '') {
-						clearInterval(interval);
-						resolve(output);
-					}
-				}, 100);
-			});
-			const outputDocument = await vscode.workspace.openTextDocument({ content: output });
-			await vscode.commands.executeCommand('vscode.diff', outputDocument.uri, vscode.Uri.file(outputFilePath), 'Output Diff');
+			terminal.sendText(`Get-Content "${inputFilePath}" | python "${filePath}" > "${programOutputFilePath}"`);
+			await vscode.commands.executeCommand('vscode.diff', programOutputFilePath, vscode.Uri.file(outputFilePath), 'Output Diff');
 		} else if (language === 'java') {
 			const terminal = vscode.window.createTerminal({ name: 'CodeQuest ByteBuster Debug' });
 			terminal.show();
 			terminal.sendText(`javac "${filePath}"`);
-			const classFilePath = `${dirPath}\\${stem}.class`;
-			terminal.sendText(`Get-Content "${inputFilePath}" | java -classpath "${dirPath}" "${stem}" | Out-File -FilePath "${classFilePath}"`);
-			const output = await new Promise<string>(resolve => {
-				const interval = setInterval(async () => {
-					const outputBuffer = await vscode.workspace.fs.readFile(vscode.Uri.file(classFilePath));
-					const output = new TextDecoder().decode(outputBuffer);
-					if (output.trim() !== '') {
-						clearInterval(interval);
-						resolve(output);
-					}
-				}, 100);
-			});
-			const outputDocument = await vscode.workspace.openTextDocument({ content: output });
-			await vscode.commands.executeCommand('vscode.diff', outputDocument.uri, vscode.Uri.file(outputFilePath), 'Output Diff');
+			const programOutputFilePath = `${dirPath}\\${stem}.out`;
+			terminal.sendText(`Get-Content "${inputFilePath}" | java -classpath "${dirPath}" "${stem}" > "${programOutputFilePath}"`);
+			await vscode.commands.executeCommand('vscode.diff', outputFilePath, vscode.Uri.file(outputFilePath), 'Output Diff');
 		} else {
 			vscode.window.showErrorMessage('Unsupported language');
 			return;

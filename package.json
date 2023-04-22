@@ -2,7 +2,7 @@
   "name": "codequest-bytebuster",
   "displayName": "CodeQuest ByteBusters",
   "description": "An extension to create folders for CodeQuest competition @ ByteBuster Team",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.77.0"
   },
