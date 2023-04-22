@@ -1,1 +1,1 @@
-COME ON I DON"T CARE
+This is the ByteBuster team's extension to generate the competition problem's boilerplate.

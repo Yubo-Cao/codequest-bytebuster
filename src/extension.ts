@@ -1,5 +1,7 @@
 import { TextDecoder } from 'node:util';
 import * as vscode from 'vscode';
+import * as path from 'path';
+
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -10,15 +12,19 @@ export function activate(context: vscode.ExtensionContext) {
 		const defaultCompetitionYear = config.get<string>('defaultCompetitionYear');
 		const currentYear = new Date().getFullYear();
 		const [startYear, endYear] = defaultCompetitionYear ? defaultCompetitionYear.split('-').map(Number) : [currentYear, currentYear + 1];
-		const competitionName = defaultCompetitionName || await vscode.window.showInputBox({ prompt: 'Enter competition name' });
+		const competitionName = defaultCompetitionName || await vscode.window.showInputBox({ prompt: 'Enter competition name' }) || "codequest";
 		const language = (defaultLanguage || (await vscode.window.showInputBox({ prompt: 'Enter language' })) || "python").toLowerCase();
 		const title = await vscode.window.showInputBox({ prompt: 'Enter title' });
+		if (!title) {
+			vscode.window.showErrorMessage('Title cannot be empty');
+			return;
+		}
 		const year = `${startYear}-${endYear}`;
 		if (!vscode.workspace.workspaceFolders) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
 		}
-		const folderPath = `${vscode.workspace.workspaceFolders[0].uri.fsPath}\\${competitionName}\\${year}\\${language}\\${title}`;
+		const folderPath = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, competitionName, year, language, title);
 		await vscode.workspace.fs.createDirectory(vscode.Uri.file(folderPath));
 		vscode.window.showInformationMessage(`Competition template created at ${folderPath}`);
 
@@ -28,13 +34,14 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		const inputFilePath = `${folderPath}\\1.in`;
-		const outputFilePath = `${folderPath}\\1.out`;
-		const sourceFilePath = `${folderPath}\\main.${{
+		const inputFilePath = path.join(folderPath, '1.in');
+		const outputFilePath = path.join(folderPath, '1.out');
+		const sourceFilePath = path.join(folderPath, `main.${{
 			java: 'java',
 			python: 'py',
 			cpp: 'cpp'
-		}[language]}`;
+		}[language]}`);
+
 		await Promise.all([
 			vscode.workspace.fs.writeFile(vscode.Uri.file(inputFilePath), new Uint8Array),
 			vscode.workspace.fs.writeFile(vscode.Uri.file(outputFilePath), new Uint8Array),
@@ -62,7 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(disposable);
 
-	let debugDisposable = vscode.commands.registerCommand('codequest-bytebuster.launchDebug', async () => {
+let debugDisposable = vscode.commands.registerCommand('codequest-bytebuster.launchDebug', async () => {
 		// Get the active text editor
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
@@ -74,31 +81,31 @@ export function activate(context: vscode.ExtensionContext) {
 		const filePath = editor.document.uri.fsPath;
 
 		// Get the directory path of the active text editor
-		const dirPath = filePath.substring(0, filePath.lastIndexOf('\\'));
+		const dirPath = path.dirname(filePath);
 
 		// Get the stem of the active text editor
-		const stem = filePath.substring(filePath.lastIndexOf('\\') + 1, filePath.lastIndexOf('.'));
+		const stem = path.basename(filePath, path.extname(filePath));
 
 		// Check if 1.in and 1.out files exist in the same directory with the same stem
-		const inputFilePath = `${dirPath}\\1.in`;
-		const outputFilePath = `${dirPath}\\1.out`;
+		const inputFilePath = path.join(dirPath, '1.in');
+		const outputFilePath = path.join(dirPath, '1.out');
 		const inputExists = await vscode.workspace.fs.stat(vscode.Uri.file(inputFilePath)).then(() => true, () => false);
 		const outputExists = await vscode.workspace.fs.stat(vscode.Uri.file(outputFilePath)).then(() => true, () => false);
 		if (!inputExists || !outputExists) {
 			vscode.window.showErrorMessage('1.in or 1.out file not found');
 			return;
 		}
-		const programOutputFilePath = `${dirPath}\\program.out`;
+		const programOutputFilePath = path.join(dirPath, 'program.out');
 		if (await vscode.workspace.fs.stat(vscode.Uri.file(programOutputFilePath)).then(() => true, () => false)) {
 			await vscode.workspace.fs.delete(vscode.Uri.file(programOutputFilePath));
 		}
 
 		// Run the file with corresponding commands based on the language
-		const language = filePath.substring(filePath.lastIndexOf('.') + 1);
+		const language = path.extname(filePath).substring(1);
 		if (language === 'cpp') {
-			const executableFilePath = `${dirPath}\\${stem}.exe`;
+			const executableFilePath = path.join(dirPath, `${stem}.exe`);
 			const { exec } = require('child_process');
-			exec(`g++ -std=c++17 -Wall -Wextra -pedantic-errors -o "${executableFilePath}" "${filePath}" && type "${inputFilePath}" | "${executableFilePath}" > "${programOutputFilePath}"`, (err: any) => {
+			exec(`g++ -std=c++17 -Wall -Wextra -pedantic-errors -o "${executableFilePath}" "${filePath}" && cat "${inputFilePath}" | "${executableFilePath}" > "${programOutputFilePath}"`, (err: any) => {
 				if (err) {
 					vscode.window.showErrorMessage(`Compilation or execution error: ${err.message}`);
 					return;
@@ -107,7 +114,7 @@ export function activate(context: vscode.ExtensionContext) {
 			});
 		} else if (language === 'py') {
 			const { exec } = require('child_process');
-			exec(`type "${inputFilePath}" | python "${filePath}" > "${programOutputFilePath}"`, (err: any) => {
+			exec(`cat "${inputFilePath}" | python "${filePath}" > "${programOutputFilePath}"`, (err: any) => {
 				if (err) {
 					vscode.window.showErrorMessage(`Execution error: ${err.message}`);
 					return;
@@ -116,7 +123,7 @@ export function activate(context: vscode.ExtensionContext) {
 			});
 		} else if (language === 'java') {
 			const { exec } = require('child_process');
-			exec(`javac "${filePath}" && type "${inputFilePath}" | java -classpath "${dirPath}" "${stem}" > "${programOutputFilePath}"`, (err: any) => {
+			exec(`javac "${filePath}" && cat "${inputFilePath}" | java -classpath "${dirPath}" "${stem}" > "${programOutputFilePath}"`, (err: any) => {
 				if (err) {
 					vscode.window.showErrorMessage(`Compilation or execution error: ${err.message}`);
 					return;
@@ -129,6 +136,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 	});
+
 	context.subscriptions.push(debugDisposable);
 }
 
