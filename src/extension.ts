@@ -89,32 +89,45 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		const programOutputFilePath = `${dirPath}\\program.out`;
+		if (await vscode.workspace.fs.stat(vscode.Uri.file(programOutputFilePath)).then(() => true, () => false)) {
+			await vscode.workspace.fs.delete(vscode.Uri.file(programOutputFilePath));
+		}
 
 		// Run the file with corresponding commands based on the language
 		const language = filePath.substring(filePath.lastIndexOf('.') + 1);
 		if (language === 'cpp') {
 			const executableFilePath = `${dirPath}\\${stem}.exe`;
-			const terminal = vscode.window.createTerminal({ name: 'CodeQuest ByteBuster Debug' });
-			terminal.show();
-			terminal.sendText(`g++ -std=c++17 -Wall -Wextra -pedantic-errors -o "${executableFilePath}" "${filePath}"`);
-			terminal.sendText(`Get-Content "${inputFilePath}" | "${executableFilePath}" > "${programOutputFilePath}"`);
-			await vscode.commands.executeCommand('vscode.diff', programOutputFilePath, vscode.Uri.file(outputFilePath), 'Output Diff');
+			const { exec } = require('child_process');
+			exec(`g++ -std=c++17 -Wall -Wextra -pedantic-errors -o "${executableFilePath}" "${filePath}" && type "${inputFilePath}" | "${executableFilePath}" > "${programOutputFilePath}"`, (err: any) => {
+				if (err) {
+					vscode.window.showErrorMessage(`Compilation or execution error: ${err.message}`);
+					return;
+				}
+				vscode.commands.executeCommand('vscode.diff', vscode.Uri.file(programOutputFilePath), vscode.Uri.file(outputFilePath), 'Output Diff');
+			});
 		} else if (language === 'py') {
-			const terminal = vscode.window.createTerminal({ name: 'CodeQuest ByteBuster Debug' });
-			terminal.show();
-			terminal.sendText(`Get-Content "${inputFilePath}" | python "${filePath}" > "${programOutputFilePath}"`);
-			await vscode.commands.executeCommand('vscode.diff', programOutputFilePath, vscode.Uri.file(outputFilePath), 'Output Diff');
+			const { exec } = require('child_process');
+			exec(`type "${inputFilePath}" | python "${filePath}" > "${programOutputFilePath}"`, (err: any) => {
+				if (err) {
+					vscode.window.showErrorMessage(`Execution error: ${err.message}`);
+					return;
+				}
+				vscode.commands.executeCommand('vscode.diff', vscode.Uri.file(programOutputFilePath), vscode.Uri.file(outputFilePath), 'Output Diff');
+			});
 		} else if (language === 'java') {
-			const terminal = vscode.window.createTerminal({ name: 'CodeQuest ByteBuster Debug' });
-			terminal.show();
-			terminal.sendText(`javac "${filePath}"`);
-			const programOutputFilePath = `${dirPath}\\${stem}.out`;
-			terminal.sendText(`Get-Content "${inputFilePath}" | java -classpath "${dirPath}" "${stem}" > "${programOutputFilePath}"`);
-			await vscode.commands.executeCommand('vscode.diff', outputFilePath, vscode.Uri.file(outputFilePath), 'Output Diff');
+			const { exec } = require('child_process');
+			exec(`javac "${filePath}" && type "${inputFilePath}" | java -classpath "${dirPath}" "${stem}" > "${programOutputFilePath}"`, (err: any) => {
+				if (err) {
+					vscode.window.showErrorMessage(`Compilation or execution error: ${err.message}`);
+					return;
+				}
+				vscode.commands.executeCommand('vscode.diff', vscode.Uri.file(programOutputFilePath), vscode.Uri.file(outputFilePath), 'Output Diff');
+			});
 		} else {
 			vscode.window.showErrorMessage('Unsupported language');
 			return;
 		}
+
 	});
 	context.subscriptions.push(debugDisposable);
 }
